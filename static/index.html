@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.1</title>
+<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.2</title>
+<link rel="stylesheet" href="/static/board.css">
 <style>
 body{font-family:sans-serif;margin:24px}
-#board{width:480px;height:480px;display:grid;grid-template-columns:repeat(8,1fr);border:1px solid #333}
-.l{background:#eee}.d{background:#999}#board img{width:60px;height:60px;display:block}
-#msg{color:#b00;min-height:1.4em}
+.wrap{width:560px}#msg{color:#b00;min-height:1.4em}
 </style></head><body>
-<h1>Шахи v0.1</h1>
-<div id="board"></div>
+<h1>Шахи v0.2</h1>
+<div class="wrap"><div id="board"></div></div>
 <p id="status"></p>
-<form id="f"><input id="m" placeholder="e2e4 або Nf3" autocomplete="off"><button>Хід</button></form>
+<form id="f"><input id="m" placeholder="e2e4 або Nf3" autocomplete="off"><button>Хід</button> <button type="button" id="flip">Перевернути</button></form>
 <p id="msg"></p><p id="moves"></p>
-<script>
+<script type="module">
+import { Board } from '/static/board.js';
 const $ = id => document.getElementById(id);
 let st;
 const api = async (u, b) => {
@@ -20,27 +20,19 @@ const api = async (u, b) => {
   if (!r.ok) throw Error(j.error);
   return j;
 };
+const play = async move => {
+  $('msg').textContent = '';
+  try { st = await api(`/api/games/${st.id}/move`, { move }); $('m').value = ''; } catch (x) { $('msg').textContent = x.message; }
+  draw();
+};
+const board = new Board($('board'), play);
 function draw() {
-  $('board').innerHTML = '';
-  st.fen.split(' ')[0].split('/').forEach((row, r) => {
-    let c = 0;
-    for (const ch of row) {
-      const n = +ch || 0;
-      for (let k = 0; k < (n || 1); k++) {
-        const d = document.createElement('div');
-        d.className = (r + c) % 2 ? 'd' : 'l';
-        if (!n) { const i = new Image(); i.src = `/pieces/${ch === ch.toLowerCase() ? 'b' : 'w'}${ch.toLowerCase()}.svg`; d.append(i); }
-        $('board').append(d); c++;
-      }
-    }
-  });
+  const h = st.history.at(-1);
+  board.set({ fen: st.fen, legal: st.legal, last: h?.uci, check: h?.check });
   $('status').textContent = st.result ? `Кінець: ${st.result} (${st.reason})` : 'Хід: ' + (st.turn === 'white' ? 'білі' : 'чорні');
   $('moves').textContent = st.history.map(h => h.san).join(' ');
 }
-$('f').onsubmit = async e => {
-  e.preventDefault(); $('msg').textContent = '';
-  try { st = await api(`/api/games/${st.id}/move`, { move: $('m').value }); $('m').value = ''; draw(); }
-  catch (x) { $('msg').textContent = x.message; }
-};
-(async () => { st = await api('/api/games', {}); draw(); })();
+$('f').onsubmit = e => { e.preventDefault(); play($('m').value); };
+$('flip').onclick = () => board.setFlipped(!board.flipped);
+st = await api('/api/games', {}); draw();
 </script></body></html>

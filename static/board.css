@@ -1,0 +1,28 @@
+.board { position: relative; width: 100%; aspect-ratio: 1; user-select: none; touch-action: none; border-radius: 6px; overflow: hidden; }
+.squares { position: absolute; inset: 0; display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); }
+.sq { position: relative; }
+.sq.light { background: var(--sq-light, #e9edf1); color: var(--sq-dark, #6f8ea8); }
+.sq.dark { background: var(--sq-dark, #6f8ea8); color: var(--sq-light, #e9edf1); }
+.sq i { position: absolute; font: 600 clamp(9px, 1.6cqw, 13px)/1 "Segoe UI", sans-serif; opacity: .9; }
+.sq .rank { top: 5%; left: 5%; }
+.sq .file { right: 6%; bottom: 5%; }
+.sq.last::before, .sq.selected::before { content: ""; position: absolute; inset: 0; background: var(--sq-last, rgba(240, 190, 60, .5)); }
+.sq.selected::before { background: var(--sq-sel, rgba(60, 160, 110, .55)); }
+.sq.check { background-image: radial-gradient(circle, #ff3b30 0 25%, rgba(220, 40, 30, .55) 55%, transparent 78%); }
+.sq.target::after { content: ""; position: absolute; inset: 35%; border-radius: 50%; background: rgba(20, 40, 35, .32); }
+.sq.capture::after { content: ""; position: absolute; inset: 4%; border-radius: 50%; border: clamp(3px, .8cqw, 6px) solid rgba(20, 40, 35, .34); }
+.sq.hover { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .85); }
+.sq.movable { cursor: grab; }
+.pieces { position: absolute; inset: 0; pointer-events: none; }
+.piece { position: absolute; width: 12.5%; height: 12.5%; transition: transform .16s ease-out; }
+.piece.dragging { transition: none; z-index: 5; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .4)); }
+.arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; opacity: .85; }
+.arrows line { stroke-width: .16; stroke-linecap: round; }
+.arrows .best line { stroke: #2f8f5b; } .arrows .best polygon { fill: #2f8f5b; }
+.arrows .hint line { stroke: #c98a1b; } .arrows .hint polygon { fill: #c98a1b; }
+.promo { position: absolute; width: 12.5%; display: flex; flex-direction: column; background: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); z-index: 10; border-radius: 4px; overflow: hidden; }
+.promo button { border: 0; padding: 0; background: #fff; aspect-ratio: 1; cursor: pointer; }
+.promo button:hover, .promo button:focus-visible { background: #f2c94c; }
+.promo img { width: 100%; display: block; }
+.badge { position: absolute; transform: translate(-70%, -30%); z-index: 6; min-width: 26px; height: 26px; padding: 0 4px; border-radius: 13px; color: #fff; font: 700 14px/26px "Segoe UI", sans-serif; text-align: center; box-shadow: 0 2px 5px rgba(0, 0, 0, .35); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .piece { transition: none; } }
