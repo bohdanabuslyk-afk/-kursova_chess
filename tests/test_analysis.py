@@ -11,7 +11,7 @@ def analyse(*sans):
     for s in sans:
         b.push_san(s)
     a = Analysis(b)
-    a.seconds = 0.15
+    a.nodes = 2000
     a.run()
     return a
 
@@ -63,6 +63,10 @@ class WholeGame(unittest.TestCase):
     def test_book_moves(self):
         a = analyse("e4", "e5", "Nf3", "Nc6")
         self.assertEqual({r["class"] for r in a.rows}, {"book"})
+
+    def test_same_result_every_time(self):
+        moves = ("e4", "e5", "Qh5", "Nc6", "Bc4", "g6", "Qf3", "Nf6")
+        self.assertEqual(analyse(*moves).rows, analyse(*moves).rows)
 
     def test_empty_game(self):
         a = analyse()

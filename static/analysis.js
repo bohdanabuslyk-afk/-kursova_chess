@@ -52,7 +52,7 @@ export class AnalysisView {
     const buttons = `<div class="actions pad"><button class="btn primary" data-speed="fast">Швидкий аналіз</button><button class="btn" data-speed="deep">Глибокий аналіз</button></div>`;
     if (this.error || d?.error) { this.root.innerHTML = `<p class="note bad">${esc(this.error || d.error)}</p>${buttons}`; return; }
     if (!g.history.length) { this.root.innerHTML = '<p class="note">Зробіть хоча б один хід, щоб було що аналізувати.</p>'; return; }
-    if (!d) { this.root.innerHTML = `<p class="note">Рушій оцінить кожен хід партії, знайде помилки та покаже кращі варіанти. Швидкий – близько 0,6 с на хід, глибокий – до 2 с.</p>${buttons}`; return; }
+    if (!d) { this.root.innerHTML = `<p class="note">Рушій оцінить кожен хід партії, знайде помилки та покаже кращі варіанти. Швидкий аналіз перебирає до 8 тисяч позицій на хід (приблизно секунда), глибокий – до 30 тисяч.</p>${buttons}`; return; }
     let html = '';
     if (!d.summary) html += `<div class="progress"><span>Аналізую хід ${d.done} з ${d.total}</span><progress max="${d.total}" value="${d.done}"></progress></div>`;
     else html += this.summary(d);

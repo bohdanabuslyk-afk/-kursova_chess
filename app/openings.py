@@ -1,5 +1,7 @@
 """Невеликий довідник дебютів: послідовність ходів (SAN) -> назва."""
 
+import random
+
 _LINES = {
     "e4": "Відкритий дебют (1.e4)",
     "d4": "Закритий дебют (1.d4)",
@@ -61,6 +63,13 @@ _LINES = {
 BOOK = {tuple(line.split()): name for line, name in _LINES.items()}
 # Усі початкові відрізки довідкових варіантів теж вважаємо теорією.
 _PREFIXES = {line[:i] for line in BOOK for i in range(1, len(line) + 1)}
+
+
+def book_move(sans: list[str], rng: random.Random) -> str | None:
+    """Випадкове продовження з довідника або None, якщо теорія скінчилася."""
+    n = len(sans)
+    options = sorted({p[n] for p in _PREFIXES if len(p) == n + 1 and p[:n] == tuple(sans)})
+    return rng.choice(options) if options else None
 
 
 def opening_name(sans: list[str]) -> str | None:

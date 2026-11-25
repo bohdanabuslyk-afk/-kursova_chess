@@ -22,7 +22,9 @@ CLASSES = {
     "blunder": ("груба помилка", "??"),
     "forced": ("єдиний", "□"),
 }
-SPEEDS = {"fast": (5, 0.6), "deep": (8, 2.0)}  # глибина, секунд на позицію
+# Найбільша глибина та ліміт позицій на хід. Ліміт не за часом, щоб повторний аналіз
+# давав той самий результат незалежно від завантаження комп'ютера.
+SPEEDS = {"fast": (5, 8_000), "deep": (8, 30_000)}
 
 
 def win_percent(cp: int) -> float:
@@ -65,7 +67,7 @@ class Analysis:
 
     def __init__(self, board: chess.Board, speed: str = "fast") -> None:
         self.moves = list(board.move_stack)
-        self.depth, self.seconds = SPEEDS[speed]
+        self.depth, self.nodes = SPEEDS[speed]
         self.speed = speed
         self.done = 0
         self.total = len(self.moves) + 1
@@ -109,7 +111,7 @@ class Analysis:
     def _eval(self, engine: Engine, board: chess.Board) -> SearchResult:
         if board.is_insufficient_material() or board.is_repetition(3) or board.halfmove_clock >= 100:
             return SearchResult(next(iter(board.legal_moves), None), 0)
-        return engine.search(board, self.depth, self.seconds, min_depth=2)
+        return engine.search(board, self.depth, nodes=self.nodes, min_depth=2)
 
     def _row(self, board, i, move, san, color, before, after, sans, only) -> dict:
         sign = 1 if color else -1

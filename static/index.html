@@ -10,8 +10,10 @@
 </head>
 <body>
 <header class="top">
-  <h1>Шахи з мовною моделлю</h1>
+  <img class="logo" src="/pieces/wn.svg" alt=""><h1>Шахи з мовною моделлю</h1>
+  <span class="chipmodel" id="chip-model"></span>
   <div class="right">
+    <button class="btn" id="btn-settings">Оформлення</button>
     <button class="btn" id="btn-archive">Архів</button>
     <button class="btn primary" id="btn-new">Нова партія</button>
   </div>
@@ -32,6 +34,7 @@
     </div>
     <div class="tab" id="tab-game">
       <div class="status"><strong id="status"></strong><small id="opening"></small><span class="fine" id="info"></span></div>
+      <div class="finish" id="finish" hidden><button class="btn primary" id="finish-analyse">Проаналізувати партію</button><button class="btn" id="finish-new">Нова партія</button></div>
       <div class="moves" id="moves"></div>
       <div class="nav">
         <button class="btn" data-nav="start" title="На початок (Home)">⏮</button>
@@ -40,14 +43,14 @@
         <button class="btn" data-nav="end" title="У кінець (End)">⏭</button>
       </div>
       <div class="actions">
-        <button class="btn small" id="undo">Скасувати хід</button>
+        <button class="btn small" id="undo">Скасувати</button>
         <button class="btn small" id="hint">Підказка</button>
         <button class="btn small" id="flip">Перевернути</button>
         <button class="btn small" id="resign">Здатися</button>
-        <a class="btn small" id="pgn" style="text-decoration:none;color:inherit">Зберегти PGN</a>
+        <a class="btn small" id="pgn">PGN</a>
       </div>
       <form class="entry" id="entry">
-        <input id="move-input" placeholder="Хід текстом: e2e4, Nf3, O-O" autocomplete="off" spellcheck="false" aria-label="Хід текстом">
+        <input id="move-input" placeholder="Хід текстом: e2e4, Nf3, Кf3, O-O" autocomplete="off" spellcheck="false" aria-label="Хід текстом">
         <button class="btn">Хід</button>
       </form>
     </div>
@@ -73,6 +76,25 @@
     <fieldset id="fs-level"><legend>Складність</legend><div class="cards five" id="level-cards"></div><p class="hintline" id="level-desc"></p></fieldset>
     <div class="foot"><button class="btn" type="button" data-close>Закрити</button><button class="btn primary" value="ok">Почати</button></div>
   </form>
+</dialog>
+
+<dialog id="dlg-settings">
+  <div class="dlg" id="settings-box">
+    <h2>Оформлення</h2>
+    <fieldset><legend>Тема</legend><div class="cards">
+      <label><input type="radio" name="theme" value="auto">Як у системі</label>
+      <label><input type="radio" name="theme" value="light">Світла</label>
+      <label><input type="radio" name="theme" value="dark">Темна</label>
+    </div></fieldset>
+    <fieldset><legend>Дошка</legend><div class="cards">
+      <label data-board="sage"><input type="radio" name="board" value="sage"><span class="swatch"></span>Шавлія</label>
+      <label data-board="walnut"><input type="radio" name="board" value="walnut"><span class="swatch"></span>Горіх</label>
+      <label data-board="lake"><input type="radio" name="board" value="lake"><span class="swatch"></span>Озеро</label>
+    </div></fieldset>
+    <label class="check"><input type="checkbox" name="sound"> Звук ходів</label>
+    <p class="hintline">Клавіші: ← → – ходи, Home/End – початок і кінець, F – перевернути дошку.</p>
+    <div class="foot"><button class="btn primary" type="button" data-close>Готово</button></div>
+  </div>
 </dialog>
 
 <dialog id="dlg-archive">

@@ -1,12 +1,15 @@
 """Запис ходів, скасування, PGN, архів."""
+import random
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import chess
+
 from app import storage
 from app.game import Game, MoveError
-from app.openings import book_plies, opening_name
+from app.openings import BOOK, book_move, book_plies, opening_name
 
 
 def played(*moves, **kw):
@@ -113,6 +116,16 @@ class Openings(unittest.TestCase):
         self.assertEqual(opening_name("e4 e5 Nf3 Nc6 Bb5".split()), "Іспанська партія")
         self.assertEqual(opening_name("e4 c5 a3 a6".split()), "Сицилійський захист")
         self.assertIsNone(opening_name(["h4"]))
+
+    def test_book_move(self):
+        self.assertIn(book_move([], random.Random(1)), ("e4", "d4", "c4", "Nf3", "f4", "b3"))
+        self.assertIsNone(book_move(["h4"], random.Random(1)))
+
+    def test_every_book_line_is_legal(self):
+        for line in BOOK:
+            b = chess.Board()
+            for san in line:
+                b.push_san(san)
 
     def test_book(self):
         self.assertEqual(book_plies("e4 e5 Nf3 h5".split()), 3)

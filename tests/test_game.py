@@ -17,6 +17,11 @@ class ParseMove(unittest.TestCase):
         self.assertEqual(parse_move(b, "0-0").uci(), "e1g1")
         self.assertEqual(parse_move(b, "0-0-0").uci(), "e1c1")
 
+    def test_ukrainian_notation(self):
+        b = chess.Board("4k3/8/8/8/8/8/3P4/R2QKBN1 w Q - 0 1")
+        for text, uci in (("Кf3", "g1f3"), ("Крe2", "e1e2"), ("Фb3", "d1b3"), ("Тa8+", "a1a8"), ("Сg2", "f1g2")):
+            self.assertEqual(parse_move(b, text).uci(), uci)
+
     def test_promotion(self):
         b = chess.Board("8/P6k/8/8/8/8/8/K7 w - - 0 1")
         self.assertEqual(parse_move(b, "a7a8n").promotion, chess.KNIGHT)

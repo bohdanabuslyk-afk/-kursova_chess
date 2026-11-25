@@ -1,6 +1,7 @@
 import { Board, parseFen } from '/static/board.js';
 import { AnalysisView } from '/static/analysis.js';
 import { Coach } from '/static/coach.js';
+import { settings, set as setSetting, sound } from '/static/settings.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -56,7 +57,7 @@ const analysis = new AnalysisView($('tab-analysis'), {
 const explained = new Map();   // партія:хід -> пояснення
 analysis.explained = ply => {
   const key = `${st.id}:${st.history.length}:${ply}`, e = explained.get(key);
-  if (!e) return `<button class="btn small" data-explain="${ply}">${model.ready ? 'Пояснити мовною моделлю' : 'Пояснити простими словами'}</button>`;
+  if (!e) return model.ready ? `<button class="btn small" data-explain="${ply}">Пояснити мовною моделлю</button>` : '<p class="dim">Підключіть мовну модель, щоб отримати пояснення словами.</p>';
   if (e.wait) return '<p class="dim">Готую пояснення…</p>';
   return `<blockquote>${esc(e.text)}<footer>${e.by === 'llm' ? `Мовна модель ${esc(e.model)}` : 'Пояснення за шаблоном, без мовної моделі'}</footer></blockquote>${e.warning ? `<p class="warn">${esc(e.warning)}</p>` : ''}`;
 };
@@ -76,7 +77,18 @@ function showTab(name) {
   });
 }
 
+let heard = 0;
+function playSound() {
+  const n = st.history.length;
+  if (n > heard) {
+    const h = st.history.at(-1);
+    sound(st.result ? 'end' : h.check ? 'check' : h.san.includes('x') ? 'capture' : 'move');
+  }
+  heard = n;
+}
+
 function open(state) {
+  heard = state.history.length;
   st = state; view = null;
   localStorage.setItem('game', st.id);
   board.setArrows([]);
@@ -104,8 +116,10 @@ function render() {
   renderEval(row);
   if (analysis.ply !== p.n) analysis.setPly(p.n);
   analysis.load(st);
+  playSound();
   renderPlayers(p);
   renderStatus();
+  $('finish').hidden = !st.result && !st.imported;
   renderMoves(p.n);
   $('pgn').href = `/api/games/${st.id}/pgn`;
   $('undo').disabled = st.imported || !st.history.length;
@@ -150,7 +164,7 @@ function renderStatus() {
   if (i?.llm) {
     const bad = i.errors.length ? `<br>Відхилено: ${i.errors.map(esc).join('; ')}` : '';
     $('info').innerHTML = `${i.comment ? `<q>${esc(i.comment)}</q><br>` : ''}${i.fallback ? 'Модель не дала правильного ходу – зіграв рушій' : `${esc(i.model)} · ${i.mode} · спроб: ${i.attempts}`} · ${i.seconds} с${bad}`;
-  } else $('info').textContent = i?.by === 'engine' && i.nodes ? `глибина ${i.depth} · ${i.nodes.toLocaleString('uk')} позицій · ${i.seconds} с` : '';
+  } else $('info').textContent = i?.by === 'book' ? 'хід із дебютної книги' : i?.by === 'engine' && i.nodes ? `глибина ${i.depth} · ${i.nodes.toLocaleString('uk')} позицій · ${i.seconds} с` : '';
 }
 
 const mark = ply => { const r = rows?.[ply - 1]; return r && r.class !== 'good' ? `<i class="mk ${r.class}" title="${r.className}">${r.mark}</i>` : ''; };
@@ -192,7 +206,15 @@ $('hint').onclick = guard(async () => {
   board.setArrows([{ uci: h.uci, cls: 'hint' }]); say(`Підказка: ${h.pv}`, true);
 });
 
+$('finish-analyse').onclick = () => { showTab('analysis'); if (!analysis.data) analysis.run('fast'); };
+$('finish-new').onclick = () => $('btn-new').click();
+
 // ---------- діалоги ----------
+$('btn-settings').onclick = () => {
+  for (const i of $('settings-box').querySelectorAll('input')) i.type === 'checkbox' ? i.checked = settings[i.name] : i.checked = settings[i.name] === i.value;
+  $('dlg-settings').showModal();
+};
+$('settings-box').onchange = e => setSetting(e.target.name, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => b.closest('dialog').close());
 const form = $('form-new');
 const syncForm = () => {
@@ -227,6 +249,9 @@ $('do-import').onclick = async () => {
 // ---------- старт ----------
 [levels, model] = await Promise.all([api('/api/levels'), api('/api/llm')]);
 $('level-cards').innerHTML = levels.map(l => `<label><input type="radio" name="level" value="${l.id}" ${l.id === 3 ? 'checked' : ''}>${esc(l.name)}</label>`).join('');
+$('chip-model').textContent = model.ready ? model.model : 'без моделі';
+$('chip-model').title = model.ready ? 'Підключена мовна модель' : 'Заповніть .env, щоб підключити мовну модель';
+$('chip-model').classList.toggle('on', model.ready);
 const old = localStorage.getItem('game');
 try { open(old ? await api(`/api/games/${old}`) : await api('/api/games', { color: 'white', level: 3 })); }
 catch { open(await api('/api/games', { color: 'white', level: 3 })); }

@@ -13,7 +13,7 @@ import chess
 import chess.pgn
 
 from .engine import LEVELS, choose_move
-from .openings import opening_name
+from .openings import book_move, opening_name
 
 
 class MoveError(ValueError):
@@ -33,9 +33,16 @@ logging.getLogger("chess.pgn").setLevel(logging.CRITICAL)  # помилки PGN 
 OPPONENTS = ("human", "engine", "llm")
 
 
+UKR_PIECES = {"Кр": "K", "Ф": "Q", "Т": "R", "С": "B", "К": "N"}
+
+
 def parse_move(board: chess.Board, text: str) -> chess.Move:
-    """Розпізнає хід: UCI (e2e4, e7e8q) або SAN (Nf3, O-O, exd5)."""
+    """Розпізнає хід: UCI (e2e4, e7e8q), SAN (Nf3, O-O, exd5) або українську нотацію (Кf3, Фd1)."""
     text = (text or "").strip().replace("0-0-0", "O-O-O").replace("0-0", "O-O")
+    for ukr, eng in UKR_PIECES.items():  # «Кр» перевіряється раніше за «К»
+        if text.startswith(ukr):
+            text = eng + text[len(ukr):]
+            break
     if not text:
         raise MoveError("Хід порожній")
     try:
@@ -124,6 +131,10 @@ class Game:
         if self.opponent == "llm":
             from . import llm  # імпорт тут, щоб гра працювала й без SDK мовної моделі
             return llm.llm_move(board, self.level)
+        if self.level >= 2:  # новачок теорії не знає
+            san = book_move([r["san"] for r in self.history()], random)
+            if san:
+                return board.parse_san(san), {"by": "book"}
         res = choose_move(board, self.level)
         return res.move, {
             "by": "engine", "depth": res.depth, "nodes": res.nodes, "seconds": round(res.seconds, 2),

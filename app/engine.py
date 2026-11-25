@@ -186,6 +186,7 @@ class Engine:
         self.killers: dict[int, list[chess.Move]] = {}
         self.hist: dict[tuple[bool, int, int], int] = {}
         self.deadline = float("inf")
+        self.node_limit = float("inf")
         self.path: set[tuple] = set()  # позиції партії та поточної гілки – для виявлення повторень
 
     def _eval(self, board: chess.Board) -> int:
@@ -224,7 +225,7 @@ class Engine:
     # ---------- пошук ----------
     def _tick(self) -> None:
         self.nodes += 1
-        if not self.nodes & 255 and time.perf_counter() > self.deadline:
+        if self.nodes > self.node_limit or (not self.nodes & 255 and time.perf_counter() > self.deadline):
             raise _Timeout
 
     def _quiesce(self, board: chess.Board, alpha: int, beta: int, ply: int) -> int:
@@ -361,9 +362,12 @@ class Engine:
         return line
 
     def search(self, board: chess.Board, depth: int = 4, seconds: float = 2.0, multi: bool = False,
-               min_depth: int = 1) -> SearchResult:
+               min_depth: int = 1, nodes: int | None = None) -> SearchResult:
         """Ітеративне заглиблення. multi=True – точна оцінка кожного кореневого ходу.
-        Глибини до min_depth завершуються навіть тоді, коли час вийшов."""
+        Глибини до min_depth завершуються навіть тоді, коли ліміт вичерпано.
+        nodes – ліміт позицій замість часу: результат однаковий на будь-якому комп'ютері."""
+        if nodes is not None:
+            seconds = float("inf")
         board = board.copy()
         self._reset()
         start = time.perf_counter()
@@ -377,7 +381,9 @@ class Engine:
             return SearchResult(None, -MATE if board.is_check() else 0)
         result = SearchResult(moves[0], evaluate(board), pv=[moves[0]])
         for d in range(1, depth + 1):
-            self.deadline = start + seconds if d > min_depth else float("inf")
+            free = d <= min_depth
+            self.deadline = float("inf") if free else start + seconds
+            self.node_limit = float("inf") if free or nodes is None else nodes
             alpha, scored = -MATE * 2, []
             try:
                 for i, move in enumerate(moves):
@@ -401,7 +407,8 @@ class Engine:
                                   scores=scored if multi else [])
             if abs(result.score) >= MATE_ZONE and MATE - abs(result.score) <= d:
                 break
-            if d >= min_depth and time.perf_counter() - start > seconds * 0.6:
+            if d >= min_depth and (time.perf_counter() - start > seconds * 0.6
+                                   or (nodes is not None and self.nodes > nodes * 0.6)):
                 break
         result.nodes = self.nodes
         result.seconds = time.perf_counter() - start
