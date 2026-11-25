@@ -80,6 +80,8 @@ class LLM:
             raise LLMError("Модель не відповіла вчасно") from None
         except openai.APIConnectionError:
             raise LLMError("Немає зв'язку із сервісом моделі") from None
+        except openai.InternalServerError:
+            raise LLMError("Сервіс моделі перевантажений або тимчасово недоступний") from None
         except openai.APIError as e:
             raise LLMError(f"Помилка сервісу моделі ({getattr(e, 'status_code', '?')})") from None
         text = (r.choices[0].message.content or "") if r.choices else ""
@@ -202,7 +204,7 @@ def llm_move(board: chess.Board, level: int, model: LLM | None = None) -> tuple[
 
 
 # ---------------------------------------------------------------- пояснення
-COACH = ("Ти – доброзичливий шаховий тренер. Пишеш українською, просто й коротко, без розмітки Markdown. "
+COACH = ("Ти – доброзичливий шаховий тренер. Пишеш грамотною українською, просто й коротко, без вітань і без розмітки Markdown. Назви полів і ходів пиши лише латиницею, як у даних (d4, Nf3). "
          "Спирайся ЛИШЕ на наведені дані рушія: не вигадуй ходів, варіантів та оцінок, яких там немає.")
 
 
