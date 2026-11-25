@@ -1,10 +1,13 @@
 """Стан однієї партії. Усі правила перевіряє python-chess."""
 from __future__ import annotations
 
+import random
 import threading
 import uuid
 
 import chess
+
+from .engine import LEVELS, choose_move
 
 
 class MoveError(ValueError):
@@ -45,18 +48,49 @@ def parse_move(board: chess.Board, text: str) -> chess.Move:
 
 
 class Game:
-    def __init__(self) -> None:
+    def __init__(self, color: str = "white", opponent: str = "human", level: int = 3) -> None:
+        """color – колір гравця; opponent: human (двоє за одним екраном) або engine."""
+        if color == "random":
+            color = random.choice(("white", "black"))
+        if color not in ("white", "black"):
+            raise MoveError("Невідомий колір")
+        if opponent not in ("human", "engine"):
+            raise MoveError("Невідомий суперник")
+        if level not in LEVELS:
+            raise MoveError("Невідомий рівень складності")
         self.id = uuid.uuid4().hex[:12]
+        self.color, self.opponent, self.level = color, opponent, level
         self.board = chess.Board()
         self.lock = threading.RLock()
+        self.info: dict | None = None  # дані про останній хід суперника
+
+    @property
+    def players_turn(self) -> bool:
+        return self.opponent == "human" or self.board.turn == (self.color == "white")
 
     def play(self, text: str) -> chess.Move:
         with self.lock:
             if self.outcome()[0]:
                 raise MoveError("Партію вже завершено")
+            if not self.players_turn:
+                raise MoveError("Зараз хід суперника")
             move = parse_move(self.board, text)
             self.board.push(move)
             return move
+
+    def reply(self) -> None:
+        """Хід комп'ютера. Пошук іде на копії дошки, тому стан можна читати паралельно."""
+        with self.lock:
+            if self.outcome()[0] or self.players_turn:
+                return
+            board, fen = self.board.copy(), self.board.fen()
+        res = choose_move(board, self.level)
+        with self.lock:
+            if self.board.fen() != fen:  # поки думали, стан партії змінився
+                return
+            self.info = {"depth": res.depth, "nodes": res.nodes, "seconds": round(res.seconds, 2),
+                         "pv": board.variation_san(res.pv) if res.pv else ""}
+            self.board.push(res.move)
 
     def outcome(self) -> tuple[str | None, str | None]:
         """(результат, причина) або (None, None), якщо партія триває."""
@@ -90,7 +124,7 @@ class Game:
         with self.lock:
             result, reason = self.outcome()
             legal: dict[str, list[str]] = {}
-            if not result:
+            if not result and self.players_turn:
                 for m in self.board.legal_moves:
                     targets = legal.setdefault(chess.square_name(m.from_square), [])
                     to = chess.square_name(m.to_square)
@@ -98,6 +132,12 @@ class Game:
                         targets.append(to)
             return {
                 "id": self.id,
+                "color": self.color,
+                "opponent": self.opponent,
+                "level": self.level,
+                "levelName": LEVELS[self.level].name,
+                "playersTurn": self.players_turn,
+                "info": self.info,
                 "fen": self.board.fen(),
                 "turn": "white" if self.board.turn else "black",
                 "legal": legal,

@@ -1,11 +1,15 @@
 <!doctype html>
-<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.2</title>
+<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.3</title>
 <link rel="stylesheet" href="/static/board.css">
 <style>
 body{font-family:sans-serif;margin:24px}
 .wrap{width:560px}#msg{color:#b00;min-height:1.4em}
 </style></head><body>
-<h1>Шахи v0.2</h1>
+<h1>Шахи v0.3</h1>
+<form id="new">
+<label>Колір <select id="color"><option value="white">білі</option><option value="black">чорні</option><option value="random">випадково</option></select></label>
+<label>Складність <select id="level"></select></label>
+<button>Нова партія</button></form><p id="desc"></p>
 <div class="wrap"><div id="board"></div></div>
 <p id="status"></p>
 <form id="f"><input id="m" placeholder="e2e4 або Nf3" autocomplete="off"><button>Хід</button> <button type="button" id="flip">Перевернути</button></form>
@@ -23,16 +27,28 @@ const api = async (u, b) => {
 const play = async move => {
   $('msg').textContent = '';
   try { st = await api(`/api/games/${st.id}/move`, { move }); $('m').value = ''; } catch (x) { $('msg').textContent = x.message; }
-  draw();
+  draw(); reply();
 };
+async function reply() {
+  if (st.result || st.playersTurn) return;
+  st = await api(`/api/games/${st.id}/reply`, {}); draw();
+}
 const board = new Board($('board'), play);
 function draw() {
   const h = st.history.at(-1);
   board.set({ fen: st.fen, legal: st.legal, last: h?.uci, check: h?.check });
-  $('status').textContent = st.result ? `Кінець: ${st.result} (${st.reason})` : 'Хід: ' + (st.turn === 'white' ? 'білі' : 'чорні');
+  $('status').textContent = st.result ? `Кінець: ${st.result} (${st.reason})` : 'Хід: ' + (st.turn === 'white' ? 'білі' : 'чорні') + (st.playersTurn ? ' (ви)' : " – комп'ютер думає…");
+  $('desc').textContent = `Ви граєте: ${st.color === 'white' ? 'білі' : 'чорні'}. Суперник: ${st.levelName}.` + (st.info ? ` Глибина ${st.info.depth}, позицій ${st.info.nodes}, ${st.info.seconds} с.` : '');
   $('moves').textContent = st.history.map(h => h.san).join(' ');
 }
 $('f').onsubmit = e => { e.preventDefault(); play($('m').value); };
 $('flip').onclick = () => board.setFlipped(!board.flipped);
-st = await api('/api/games', {}); draw();
+const levels = await api('/api/levels');
+$('level').innerHTML = levels.map(l => `<option value="${l.id}" ${l.id === 3 ? 'selected' : ''}>${l.name} – ${l.description}</option>`).join('');
+async function start() {
+  st = await api('/api/games', { color: $('color').value, level: +$('level').value });
+  board.setFlipped(st.color === 'black'); draw(); reply();
+}
+$('new').onsubmit = e => { e.preventDefault(); start(); };
+start();
 </script></body></html>

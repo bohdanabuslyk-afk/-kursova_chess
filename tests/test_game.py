@@ -51,5 +51,29 @@ class GameRules(unittest.TestCase):
         self.assertEqual(g.state()["result"], "1/2-1/2")
 
 
+class Opponent(unittest.TestCase):
+    def test_computer_moves_first_when_player_is_black(self):
+        g = Game("black", "engine", 1)
+        self.assertEqual(g.state()["legal"], {})
+        with self.assertRaises(MoveError):
+            g.play("e4")
+        g.reply()
+        self.assertEqual(len(g.board.move_stack), 1)
+        self.assertTrue(g.players_turn)
+
+    def test_reply_does_nothing_on_players_turn(self):
+        g = Game("white", "engine", 1)
+        g.reply()
+        self.assertEqual(len(g.board.move_stack), 0)
+
+    def test_random_color(self):
+        self.assertIn(Game("random").color, ("white", "black"))
+
+    def test_bad_settings(self):
+        for args in (("red",), ("white", "x"), ("white", "engine", 9)):
+            with self.assertRaises(MoveError):
+                Game(*args)
+
+
 if __name__ == "__main__":
     unittest.main()
