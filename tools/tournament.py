@@ -19,14 +19,17 @@ from app.openings import BOOK
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "data"
 LIMIT = 200  # півходів; довша партія – нічия
+# Різні початки по 4 півходи. Рівні 4 і 5 детерміновані, тому з однакового дебюту вийшла б
+# та сама партія, і вибірка не була б незалежною.
+OPENINGS = sorted({line[:4] for line in BOOK if len(line) >= 4})
+random.Random(2026).shuffle(OPENINGS)
 
 
 def play(task: tuple[int, int, int]) -> tuple[int, int, float, int]:
     """(нижчий рівень, вищий рівень, очки вищого, півходів)."""
     low, high, seed = task
-    rng = random.Random(seed // 2)  # однаковий дебют двічі – по разу кожним кольором
     board = chess.Board()
-    for san in rng.choice([line for line in BOOK if len(line) >= 4])[:4]:
+    for san in OPENINGS[seed // 2]:  # кожен дебют двічі – по разу кожним кольором
         board.push_san(san)
     rng = random.Random(seed * 7919)
     high_white = seed % 2 == 0
@@ -48,6 +51,8 @@ def elo(score: float) -> str:
 def main() -> None:
     games = int(sys.argv[1]) if len(sys.argv) > 1 else 20
     procs = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+    if games > 2 * len(OPENINGS):
+        sys.exit(f"Найбільше {2 * len(OPENINGS)} партій на пару: стільки є різних дебютів")
     tasks = [(a, a + 1, i) for a in range(1, 5) for i in range(games)]
     table: dict[tuple[int, int], list] = {}
     with Pool(procs) as pool:
