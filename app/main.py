@@ -13,7 +13,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import storage
+from . import llm, storage
 from .analysis import SPEEDS, Analysis
 from .engine import LEVELS, Engine
 from .game import Game, MoveError
@@ -70,8 +70,14 @@ async def levels(request: Request) -> Response:
     return JSONResponse([{"id": i, "name": lv.name, "description": lv.description} for i, lv in LEVELS.items()])
 
 
+async def llm_status(request: Request) -> Response:
+    return JSONResponse(llm.llm.status())
+
+
 async def create_game(request: Request) -> Response:
     body = await body_of(request)
+    if body.get("opponent") == "llm" and not llm.llm.ready:
+        raise HTTPException(400, "Мовну модель не підключено: заповніть файл .env")
     game = Game(body.get("color", "white"), body.get("opponent", "engine"), body.get("level", 3))
     games[game.id] = game
     return JSONResponse(game.state())
@@ -147,6 +153,36 @@ async def analysis_state(request: Request) -> Response:
     return JSONResponse(analysis.state() if analysis else {"started": False})
 
 
+async def explain(request: Request) -> Response:
+    game = get_game(request)
+    ply = (await body_of(request)).get("ply")
+    with game.lock:
+        rows = game.analysis.rows if game.analysis else []
+        if not isinstance(ply, int) or not 1 <= ply <= len(rows):
+            raise HTTPException(400, "Цей хід ще не проаналізовано")
+        row = rows[ply - 1]
+        board = chess.Board()
+        for move in game.analysis.moves[:ply - 1]:
+            board.push(move)
+    return JSONResponse(await asyncio.to_thread(llm.explain, board, row))
+
+
+async def coach_chat(request: Request) -> Response:
+    game = get_game(request)
+    question = str((await body_of(request)).get("question", "")).strip()[:500]
+    if not question:
+        raise HTTPException(400, "Порожнє запитання")
+    with game.lock:
+        board = game.board.copy()
+    answer = await asyncio.to_thread(llm.chat, board, list(game.chat), question)
+    game.chat += [{"role": "user", "content": question}, {"role": "assistant", "content": answer}]
+    return JSONResponse({"answer": answer})
+
+
+async def llm_error(request: Request, exc: Exception) -> Response:
+    return JSONResponse({"error": str(exc)}, status_code=502)
+
+
 async def pgn(request: Request) -> Response:
     game = get_game(request)
     return Response(game.pgn(), media_type="application/x-chess-pgn",
@@ -166,6 +202,7 @@ app = Starlette(
         Route("/", index),
         Route("/pieces/{symbol}.svg", piece),
         Route("/api/levels", levels),
+        Route("/api/llm", llm_status),
         Route("/api/games", list_games),
         Route("/api/games", create_game, methods=["POST"]),
         Route("/api/import", import_game, methods=["POST"]),
@@ -177,8 +214,10 @@ app = Starlette(
         Route("/api/games/{id}/hint", hint, methods=["POST"]),
         Route("/api/games/{id}/analysis", analysis_state),
         Route("/api/games/{id}/analysis", analysis_start, methods=["POST"]),
+        Route("/api/games/{id}/explain", explain, methods=["POST"]),
+        Route("/api/games/{id}/chat", coach_chat, methods=["POST"]),
         Route("/api/games/{id}/pgn", pgn),
         Mount("/static", StaticFiles(directory=STATIC)),
     ],
-    exception_handlers={MoveError: move_error, HTTPException: http_error},
+    exception_handlers={MoveError: move_error, llm.LLMError: llm_error, HTTPException: http_error},
 )

@@ -113,9 +113,7 @@ export class AnalysisView {
       if (!d.summary) return '';
       return `<div class="detail"><h3>Ключові моменти</h3>${m.length ? `<div class="chips">${m.map(p => { const q = this.row(p); return `<button class="chip" data-go="${p}"><i class="mk ${q.class}">${q.mark}</i>${Math.ceil(p / 2)}${p % 2 ? '.' : '…'} ${esc(q.san)}</button>`; }).join('')}</div>` : '<p>Серйозних помилок немає.</p>'}<p class="dim">Виберіть хід у списку або на графіку, щоб побачити розбір.</p></div>`;
     }
-    const bestDiffers = r.uci !== r.bestUci;
     return `<div class="detail"><h3><i class="mk ${r.class}">${r.mark}</i>${Math.ceil(r.ply / 2)}${r.ply % 2 ? '.' : '…'} ${esc(r.san)} – ${r.className}<span class="score">${r.scoreText}</span></h3>
-      ${bestDiffers ? `<p>Найкраще: <b>${esc(r.best)}</b> (${r.bestScoreText}) <span class="pv">${esc(r.bestLine)}</span></p>` : ''}
       <ul>${r.facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
       <div class="explain" id="explain-${r.ply}">${this.explained?.(r.ply) ?? ''}</div>
       <p class="dim">Глибина оцінки: ${r.depth} півходів.${d.summary ? ' <button class="link" data-go="0">До ключових моментів</button>' : ''}</p></div>`;

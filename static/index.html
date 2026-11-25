@@ -28,6 +28,7 @@
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="game" aria-selected="true">Партія</button>
       <button role="tab" data-tab="analysis" aria-selected="false">Аналіз</button>
+      <button role="tab" data-tab="coach" aria-selected="false">Тренер</button>
     </div>
     <div class="tab" id="tab-game">
       <div class="status"><strong id="status"></strong><small id="opening"></small><span class="fine" id="info"></span></div>
@@ -51,6 +52,7 @@
       </form>
     </div>
     <div class="tab scroll" id="tab-analysis" hidden></div>
+    <div class="tab" id="tab-coach" hidden></div>
     <div class="msg" id="msg" role="status"></div>
   </aside>
 </main>
@@ -60,8 +62,9 @@
     <h2>Нова партія</h2>
     <fieldset><legend>Суперник</legend><div class="cards" id="opp-cards">
       <label><input type="radio" name="opponent" value="engine" checked><img src="/pieces/br.svg" alt="">Рушій</label>
+      <label><input type="radio" name="opponent" value="llm"><img src="/pieces/bn.svg" alt="">Мовна модель</label>
       <label><input type="radio" name="opponent" value="human"><span class="pair"><img src="/pieces/wp.svg" alt=""><img src="/pieces/bp.svg" alt=""></span>Двоє гравців</label>
-    </div></fieldset>
+    </div><p class="hintline" id="llm-note"></p></fieldset>
     <fieldset><legend>Ваш колір</legend><div class="cards">
       <label><input type="radio" name="color" value="white" checked><img src="/pieces/wk.svg" alt="">Білі</label>
       <label><input type="radio" name="color" value="random"><span class="pair"><img src="/pieces/wk.svg" alt=""><img src="/pieces/bk.svg" alt=""></span>Випадково</label>

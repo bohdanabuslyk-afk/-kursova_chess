@@ -121,6 +121,9 @@ class Game:
             self._push(move)
 
     def _think(self, board: chess.Board) -> tuple[chess.Move, dict]:
+        if self.opponent == "llm":
+            from . import llm  # імпорт тут, щоб гра працювала й без SDK мовної моделі
+            return llm.llm_move(board, self.level)
         res = choose_move(board, self.level)
         return res.move, {
             "by": "engine", "depth": res.depth, "nodes": res.nodes, "seconds": round(res.seconds, 2),

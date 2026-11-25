@@ -2,8 +2,8 @@
 import { open, sleep } from './shot.mjs';
 export { sleep };
 
-export async function start(opts) {
-  const p = await open('http://127.0.0.1:8000/', opts);
+export async function start(opts = {}) {
+  const p = await open(`http://127.0.0.1:${opts.port || 8000}/`, opts);
   const sq = async s => {
     const [x, y, w, f] = await p.js(`(()=>{const r=document.querySelector('.squares').getBoundingClientRect();return [r.x,r.y,r.width,document.querySelector('.sq .rank').textContent==='1']})()`);
     const c = 'abcdefgh'.indexOf(s[0]), r = 8 - +s[1], u = w / 8;

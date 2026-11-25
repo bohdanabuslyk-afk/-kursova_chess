@@ -1,5 +1,6 @@
 import { Board, parseFen } from '/static/board.js';
 import { AnalysisView } from '/static/analysis.js';
+import { Coach } from '/static/coach.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -7,6 +8,7 @@ let st = null;        // стан партії з сервера
 let view = null;      // номер півходу, який переглядаємо; null – поточна позиція
 let busy = false;     // суперник думає
 let levels = [];
+let model = { ready: false };
 
 export async function api(url, body) {
   const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -49,8 +51,23 @@ let rows = null;      // розбір ходів, якщо він є
 const analysis = new AnalysisView($('tab-analysis'), {
   api, go: n => go(n),
   onData: d => { rows = d?.rows || null; if (st) render(); },
-  explain: () => {},
+  explain: (ply, btn) => explainMove(ply, btn),
 });
+const explained = new Map();   // партія:хід -> пояснення
+analysis.explained = ply => {
+  const key = `${st.id}:${st.history.length}:${ply}`, e = explained.get(key);
+  if (!e) return `<button class="btn small" data-explain="${ply}">${model.ready ? 'Пояснити мовною моделлю' : 'Пояснити простими словами'}</button>`;
+  if (e.wait) return '<p class="dim">Готую пояснення…</p>';
+  return `<blockquote>${esc(e.text)}<footer>${e.by === 'llm' ? `Мовна модель ${esc(e.model)}` : 'Пояснення за шаблоном, без мовної моделі'}</footer></blockquote>${e.warning ? `<p class="warn">${esc(e.warning)}</p>` : ''}`;
+};
+async function explainMove(ply) {
+  const key = `${st.id}:${st.history.length}:${ply}`;
+  explained.set(key, { wait: true }); analysis.render();
+  try { explained.set(key, await api(`/api/games/${st.id}/explain`, { ply })); }
+  catch (e) { explained.delete(key); say(e.message); }
+  analysis.render();
+}
+const coach = new Coach($('tab-coach'), { api, status: () => model });
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 function showTab(name) {
   document.querySelectorAll('[data-tab]').forEach(b => {
@@ -63,6 +80,7 @@ function open(state) {
   st = state; view = null;
   localStorage.setItem('game', st.id);
   board.setArrows([]);
+  coach.open(st.id);
   board.setFlipped(st.color === 'black');
   render(); reply();
 }
@@ -129,7 +147,10 @@ function renderStatus() {
     : st.imported ? 'Перегляд партії' : `Хід ${side}${st.opponent === 'human' ? '' : st.playersTurn ? ' – ваш' : ''}`;
   $('opening').textContent = st.opening || '';
   const i = st.info;
-  $('info').textContent = i?.by === 'engine' && i.nodes ? `глибина ${i.depth} · ${i.nodes.toLocaleString('uk')} позицій · ${i.seconds} с` : '';
+  if (i?.llm) {
+    const bad = i.errors.length ? `<br>Відхилено: ${i.errors.map(esc).join('; ')}` : '';
+    $('info').innerHTML = `${i.comment ? `<q>${esc(i.comment)}</q><br>` : ''}${i.fallback ? 'Модель не дала правильного ходу – зіграв рушій' : `${esc(i.model)} · ${i.mode} · спроб: ${i.attempts}`} · ${i.seconds} с${bad}`;
+  } else $('info').textContent = i?.by === 'engine' && i.nodes ? `глибина ${i.depth} · ${i.nodes.toLocaleString('uk')} позицій · ${i.seconds} с` : '';
 }
 
 const mark = ply => { const r = rows?.[ply - 1]; return r && r.class !== 'good' ? `<i class="mk ${r.class}" title="${r.className}">${r.mark}</i>` : ''; };
@@ -176,7 +197,12 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => b.close
 const form = $('form-new');
 const syncForm = () => {
   $('fs-level').hidden = form.opponent.value === 'human';
-  $('level-desc').textContent = levels.find(l => l.id === +form.level.value)?.description || '';
+  const llmOpt = form.querySelector('[value=llm]');
+  llmOpt.disabled = !model.ready;
+  llmOpt.closest('label').title = model.ready ? model.model : 'Заповніть файл .env';
+  if (!model.ready) $('llm-note').textContent = 'Мовну модель не підключено: заповніть файл .env і перезапустіть сервер.';
+  else $('llm-note').textContent = form.opponent.value === 'llm' ? `${model.model}. Рівні 1–3: модель обирає сама; 4–5: із найкращих ходів рушія.` : '';
+  $('level-desc').textContent = form.opponent.value === 'llm' ? '' : levels.find(l => l.id === +form.level.value)?.description || '';
 };
 form.onchange = syncForm;
 form.onsubmit = guard(async () => {
@@ -199,7 +225,7 @@ $('do-import').onclick = async () => {
 };
 
 // ---------- старт ----------
-levels = await api('/api/levels');
+[levels, model] = await Promise.all([api('/api/levels'), api('/api/llm')]);
 $('level-cards').innerHTML = levels.map(l => `<label><input type="radio" name="level" value="${l.id}" ${l.id === 3 ? 'checked' : ''}>${esc(l.name)}</label>`).join('');
 const old = localStorage.getItem('game');
 try { open(old ? await api(`/api/games/${old}`) : await api('/api/games', { color: 'white', level: 3 })); }
