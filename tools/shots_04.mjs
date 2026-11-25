@@ -1,0 +1,21 @@
+import { start, sleep, EVERGREEN } from './ui.mjs';
+
+const u = await start();
+const D = 'screenshots/04_v0.4_zapys_khodiv/';
+await u.newGame({ color: 'white', level: 3 }, D + '01_vikno_novoi_partii.png');
+for (const [a, b] of [['e2', 'e4'], ['g1', 'f3'], ['f1', 'c4'], ['e1', 'g1']]) await u.move(a, b);
+await u.shot(D + '02_zapys_khodiv.png');
+console.log('ходи:', await u.sans());
+await u.click('#hint'); await u.until(`/Підказка/.test(document.getElementById('msg').textContent)`); await sleep(300);
+await u.shot(D + '03_pidkazka_strilkoiu.png');
+const n = (await u.sans()).split(' ').length;
+await u.click('#undo'); await sleep(500);
+console.log('скасування:', n, '->', (await u.sans()).split(' ').length);
+await u.importPgn(EVERGREEN);
+for (let i = 0; i < 33; i++) await u.click('[data-nav=next]');
+await sleep(300);
+await u.shot(D + '04_perehliad_importovanoi_partii.png');
+await u.click('#btn-archive'); await sleep(500);
+await u.shot(D + '05_arkhiv_partii.png');
+console.log('помилки JS:', u.errors);
+await u.close();

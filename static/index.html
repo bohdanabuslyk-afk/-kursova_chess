@@ -1,54 +1,85 @@
 <!doctype html>
-<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.3</title>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Шахи з мовною моделлю</title>
+<link rel="icon" href="/pieces/wn.svg">
 <link rel="stylesheet" href="/static/board.css">
-<style>
-body{font-family:sans-serif;margin:24px}
-.wrap{width:560px}#msg{color:#b00;min-height:1.4em}
-</style></head><body>
-<h1>Шахи v0.3</h1>
-<form id="new">
-<label>Колір <select id="color"><option value="white">білі</option><option value="black">чорні</option><option value="random">випадково</option></select></label>
-<label>Складність <select id="level"></select></label>
-<button>Нова партія</button></form><p id="desc"></p>
-<div class="wrap"><div id="board"></div></div>
-<p id="status"></p>
-<form id="f"><input id="m" placeholder="e2e4 або Nf3" autocomplete="off"><button>Хід</button> <button type="button" id="flip">Перевернути</button></form>
-<p id="msg"></p><p id="moves"></p>
-<script type="module">
-import { Board } from '/static/board.js';
-const $ = id => document.getElementById(id);
-let st;
-const api = async (u, b) => {
-  const r = await fetch(u, { method: b ? 'POST' : 'GET', body: b && JSON.stringify(b) });
-  const j = await r.json();
-  if (!r.ok) throw Error(j.error);
-  return j;
-};
-const play = async move => {
-  $('msg').textContent = '';
-  try { st = await api(`/api/games/${st.id}/move`, { move }); $('m').value = ''; } catch (x) { $('msg').textContent = x.message; }
-  draw(); reply();
-};
-async function reply() {
-  if (st.result || st.playersTurn) return;
-  st = await api(`/api/games/${st.id}/reply`, {}); draw();
-}
-const board = new Board($('board'), play);
-function draw() {
-  const h = st.history.at(-1);
-  board.set({ fen: st.fen, legal: st.legal, last: h?.uci, check: h?.check });
-  $('status').textContent = st.result ? `Кінець: ${st.result} (${st.reason})` : 'Хід: ' + (st.turn === 'white' ? 'білі' : 'чорні') + (st.playersTurn ? ' (ви)' : " – комп'ютер думає…");
-  $('desc').textContent = `Ви граєте: ${st.color === 'white' ? 'білі' : 'чорні'}. Суперник: ${st.levelName}.` + (st.info ? ` Глибина ${st.info.depth}, позицій ${st.info.nodes}, ${st.info.seconds} с.` : '');
-  $('moves').textContent = st.history.map(h => h.san).join(' ');
-}
-$('f').onsubmit = e => { e.preventDefault(); play($('m').value); };
-$('flip').onclick = () => board.setFlipped(!board.flipped);
-const levels = await api('/api/levels');
-$('level').innerHTML = levels.map(l => `<option value="${l.id}" ${l.id === 3 ? 'selected' : ''}>${l.name} – ${l.description}</option>`).join('');
-async function start() {
-  st = await api('/api/games', { color: $('color').value, level: +$('level').value });
-  board.setFlipped(st.color === 'black'); draw(); reply();
-}
-$('new').onsubmit = e => { e.preventDefault(); start(); };
-start();
-</script></body></html>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <h1>Шахи з мовною моделлю</h1>
+  <div class="right">
+    <button class="btn" id="btn-archive">Архів</button>
+    <button class="btn primary" id="btn-new">Нова партія</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="left" aria-label="Дошка">
+    <div class="player" id="p-top"></div>
+    <div class="row"><div id="evalbar" hidden></div><div id="board" style="grid-column:2"></div></div>
+    <div class="player" id="p-bottom"></div>
+  </section>
+
+  <aside class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="game" aria-selected="true">Партія</button>
+    </div>
+    <div class="tab" id="tab-game">
+      <div class="status"><strong id="status"></strong><small id="opening"></small><span class="fine" id="info"></span></div>
+      <div class="moves" id="moves"></div>
+      <div class="nav">
+        <button class="btn" data-nav="start" title="На початок (Home)">⏮</button>
+        <button class="btn" data-nav="prev" title="Назад (←)">◀</button>
+        <button class="btn" data-nav="next" title="Вперед (→)">▶</button>
+        <button class="btn" data-nav="end" title="У кінець (End)">⏭</button>
+      </div>
+      <div class="actions">
+        <button class="btn small" id="undo">Скасувати хід</button>
+        <button class="btn small" id="hint">Підказка</button>
+        <button class="btn small" id="flip">Перевернути</button>
+        <button class="btn small" id="resign">Здатися</button>
+        <a class="btn small" id="pgn" style="text-decoration:none;color:inherit">Зберегти PGN</a>
+      </div>
+      <form class="entry" id="entry">
+        <input id="move-input" placeholder="Хід текстом: e2e4, Nf3, O-O" autocomplete="off" spellcheck="false" aria-label="Хід текстом">
+        <button class="btn">Хід</button>
+      </form>
+    </div>
+    <div class="msg" id="msg" role="status"></div>
+  </aside>
+</main>
+
+<dialog id="dlg-new">
+  <form method="dialog" id="form-new">
+    <h2>Нова партія</h2>
+    <fieldset><legend>Суперник</legend><div class="cards" id="opp-cards">
+      <label><input type="radio" name="opponent" value="engine" checked><img src="/pieces/br.svg" alt="">Рушій</label>
+      <label><input type="radio" name="opponent" value="human"><span class="pair"><img src="/pieces/wp.svg" alt=""><img src="/pieces/bp.svg" alt=""></span>Двоє гравців</label>
+    </div></fieldset>
+    <fieldset><legend>Ваш колір</legend><div class="cards">
+      <label><input type="radio" name="color" value="white" checked><img src="/pieces/wk.svg" alt="">Білі</label>
+      <label><input type="radio" name="color" value="random"><span class="pair"><img src="/pieces/wk.svg" alt=""><img src="/pieces/bk.svg" alt=""></span>Випадково</label>
+      <label><input type="radio" name="color" value="black"><img src="/pieces/bk.svg" alt="">Чорні</label>
+    </div></fieldset>
+    <fieldset id="fs-level"><legend>Складність</legend><div class="cards five" id="level-cards"></div><p class="hintline" id="level-desc"></p></fieldset>
+    <div class="foot"><button class="btn" type="button" data-close>Закрити</button><button class="btn primary" value="ok">Почати</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-archive">
+  <div class="dlg">
+    <h2>Архів партій</h2>
+    <div class="games" id="games"></div>
+    <div><h3>Імпорт PGN</h3><textarea id="pgn-text" placeholder="Вставте сюди партію: 1. e4 e5 2. Nf3 …"></textarea></div>
+    <div class="msg" id="import-msg" style="padding:0"></div>
+    <div class="foot"><button class="btn" type="button" data-close>Закрити</button><button class="btn primary" id="do-import">Імпортувати</button></div>
+  </div>
+</dialog>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

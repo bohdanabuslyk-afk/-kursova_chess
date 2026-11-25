@@ -13,18 +13,42 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .engine import LEVELS
+from . import storage
+from .engine import LEVELS, Engine
 from .game import Game, MoveError
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
+MAX_BODY = 200_000
 games: dict[str, Game] = {}
 
 
 def get_game(request: Request) -> Game:
-    game = games.get(request.path_params["id"])
+    gid = request.path_params["id"]
+    game = games.get(gid)
     if game is None:
-        raise HTTPException(404, "Партію не знайдено")
+        game = storage.load(gid)  # після перезапуску сервера партія береться з архіву
+        if game is None:
+            raise HTTPException(404, "Партію не знайдено")
+        games[gid] = game
     return game
+
+
+async def body_of(request: Request) -> dict:
+    raw = await request.body()
+    if len(raw) > MAX_BODY:
+        raise HTTPException(413, "Запит завеликий")
+    try:
+        data = await request.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Очікується JSON-об'єкт")
+    return data
+
+
+def saved(game: Game) -> Response:
+    storage.save(game)
+    return JSONResponse(game.state())
 
 
 async def index(request: Request) -> Response:
@@ -41,16 +65,6 @@ async def piece(request: Request) -> Response:
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "max-age=86400"})
 
 
-async def body_of(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except ValueError:
-        data = None
-    if not isinstance(data, dict):
-        raise HTTPException(400, "Очікується JSON-об'єкт")
-    return data
-
-
 async def levels(request: Request) -> Response:
     return JSONResponse([{"id": i, "name": lv.name, "description": lv.description} for i, lv in LEVELS.items()])
 
@@ -58,6 +72,17 @@ async def levels(request: Request) -> Response:
 async def create_game(request: Request) -> Response:
     body = await body_of(request)
     game = Game(body.get("color", "white"), body.get("opponent", "engine"), body.get("level", 3))
+    games[game.id] = game
+    return JSONResponse(game.state())
+
+
+async def list_games(request: Request) -> Response:
+    return JSONResponse(await asyncio.to_thread(storage.listing))
+
+
+async def import_game(request: Request) -> Response:
+    body = await body_of(request)
+    game = Game.from_pgn(str(body.get("pgn", "")))
     games[game.id] = game
     return JSONResponse(game.state())
 
@@ -70,14 +95,41 @@ async def make_move(request: Request) -> Response:
     game = get_game(request)
     body = await body_of(request)
     game.play(str(body.get("move", "")))
-    return JSONResponse(game.state())
+    return saved(game)
 
 
 async def reply(request: Request) -> Response:
     """Хід суперника рахується в окремому потоці, щоб не блокувати сервер."""
     game = get_game(request)
     await asyncio.to_thread(game.reply)
-    return JSONResponse(game.state())
+    return saved(game)
+
+
+async def undo(request: Request) -> Response:
+    game = get_game(request)
+    game.undo()
+    return saved(game)
+
+
+async def resign(request: Request) -> Response:
+    game = get_game(request)
+    game.resign()
+    return saved(game)
+
+
+async def hint(request: Request) -> Response:
+    game = get_game(request)
+    board = game.board.copy()
+    if game.outcome()[0]:
+        raise MoveError("Партію вже завершено")
+    res = await asyncio.to_thread(Engine().search, board, 6, 1.5)
+    return JSONResponse({"uci": res.move.uci(), "san": board.san(res.move), "pv": board.variation_san(res.pv)})
+
+
+async def pgn(request: Request) -> Response:
+    game = get_game(request)
+    return Response(game.pgn(), media_type="application/x-chess-pgn",
+                    headers={"Content-Disposition": f'attachment; filename="partiia-{game.id}.pgn"'})
 
 
 async def move_error(request: Request, exc: Exception) -> Response:
@@ -93,10 +145,16 @@ app = Starlette(
         Route("/", index),
         Route("/pieces/{symbol}.svg", piece),
         Route("/api/levels", levels),
+        Route("/api/games", list_games),
         Route("/api/games", create_game, methods=["POST"]),
+        Route("/api/import", import_game, methods=["POST"]),
         Route("/api/games/{id}", game_state),
         Route("/api/games/{id}/move", make_move, methods=["POST"]),
         Route("/api/games/{id}/reply", reply, methods=["POST"]),
+        Route("/api/games/{id}/undo", undo, methods=["POST"]),
+        Route("/api/games/{id}/resign", resign, methods=["POST"]),
+        Route("/api/games/{id}/hint", hint, methods=["POST"]),
+        Route("/api/games/{id}/pgn", pgn),
         Mount("/static", StaticFiles(directory=STATIC)),
     ],
     exception_handlers={MoveError: move_error, HTTPException: http_error},
