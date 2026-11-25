@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uk"><head><meta charset="utf-8"><title>Шахи – v0.1</title>
+<style>
+body{font-family:sans-serif;margin:24px}
+#board{width:480px;height:480px;display:grid;grid-template-columns:repeat(8,1fr);border:1px solid #333}
+.l{background:#eee}.d{background:#999}#board img{width:60px;height:60px;display:block}
+#msg{color:#b00;min-height:1.4em}
+</style></head><body>
+<h1>Шахи v0.1</h1>
+<div id="board"></div>
+<p id="status"></p>
+<form id="f"><input id="m" placeholder="e2e4 або Nf3" autocomplete="off"><button>Хід</button></form>
+<p id="msg"></p><p id="moves"></p>
+<script>
+const $ = id => document.getElementById(id);
+let st;
+const api = async (u, b) => {
+  const r = await fetch(u, { method: b ? 'POST' : 'GET', body: b && JSON.stringify(b) });
+  const j = await r.json();
+  if (!r.ok) throw Error(j.error);
+  return j;
+};
+function draw() {
+  $('board').innerHTML = '';
+  st.fen.split(' ')[0].split('/').forEach((row, r) => {
+    let c = 0;
+    for (const ch of row) {
+      const n = +ch || 0;
+      for (let k = 0; k < (n || 1); k++) {
+        const d = document.createElement('div');
+        d.className = (r + c) % 2 ? 'd' : 'l';
+        if (!n) { const i = new Image(); i.src = `/pieces/${ch === ch.toLowerCase() ? 'b' : 'w'}${ch.toLowerCase()}.svg`; d.append(i); }
+        $('board').append(d); c++;
+      }
+    }
+  });
+  $('status').textContent = st.result ? `Кінець: ${st.result} (${st.reason})` : 'Хід: ' + (st.turn === 'white' ? 'білі' : 'чорні');
+  $('moves').textContent = st.history.map(h => h.san).join(' ');
+}
+$('f').onsubmit = async e => {
+  e.preventDefault(); $('msg').textContent = '';
+  try { st = await api(`/api/games/${st.id}/move`, { move: $('m').value }); $('m').value = ''; draw(); }
+  catch (x) { $('msg').textContent = x.message; }
+};
+(async () => { st = await api('/api/games', {}); draw(); })();
+</script></body></html>
