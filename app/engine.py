@@ -3,7 +3,7 @@
 Складові:
   * оцінка позиції – матеріал + таблиці «фігура-поле», плавний перехід мітельшпіль/ендшпіль;
   * ітеративне заглиблення з обмеженням часу;
-  * таблиця транспозицій (хеш Зобриста, який рахує python-chess);
+  * таблиця транспозицій (ключ – бітборди позиції, їх не треба хешувати заново);
   * впорядкування ходів: хід з таблиці, взяття MVV-LVA, «вбивці», історія;
   * пошук спокою (quiescence) – прораховує взяття, щоб не обірвати розмін посередині.
 """
@@ -14,7 +14,6 @@ import time
 from dataclasses import dataclass, field
 
 import chess
-import chess.polyglot
 
 MATE = 100_000
 MATE_ZONE = MATE - 1_000
@@ -178,7 +177,8 @@ EXACT, LOWER, UPPER = 0, 1, 2
 
 class Engine:
     def __init__(self) -> None:
-        self.tt: dict[int, tuple[int, int, int, chess.Move | None]] = {}
+        self.tt: dict[tuple, tuple[int, int, int, chess.Move | None]] = {}
+        self.evals: dict[tuple, int] = {}
         self._reset()
 
     def _reset(self) -> None:
@@ -186,6 +186,17 @@ class Engine:
         self.killers: dict[int, list[chess.Move]] = {}
         self.hist: dict[tuple[bool, int, int], int] = {}
         self.deadline = float("inf")
+        self.path: set[tuple] = set()  # позиції партії та поточної гілки – для виявлення повторень
+
+    def _eval(self, board: chess.Board) -> int:
+        key = (board.pawns, board.knights, board.bishops, board.rooks, board.queens, board.kings,
+               board.occupied_co[True], board.turn)
+        score = self.evals.get(key)
+        if score is None:
+            if len(self.evals) > 300_000:
+                self.evals.clear()
+            score = self.evals[key] = evaluate(board)
+        return score
 
     # ---------- впорядкування ----------
     @staticmethod
@@ -224,10 +235,10 @@ class Engine:
             if not moves:
                 return best
             if ply > 40:
-                return evaluate(board)
+                return self._eval(board)
             stand = None
         else:
-            stand = best = evaluate(board)
+            stand = best = self._eval(board)
             if best >= beta:
                 return best
             alpha = max(alpha, best)
@@ -239,6 +250,11 @@ class Engine:
             if stand is not None and not move.promotion:
                 victim = board.piece_type_at(move.to_square) or chess.PAWN
                 if stand + VALUE_EG[victim] + 200 < alpha:  # дельта-відсікання
+                    continue
+                # Дорожчою фігурою беремо захищену дешевшу – майже завжди втрата.
+                if VALUE_MG[board.piece_type_at(move.from_square)] > VALUE_MG[victim] + 60 \
+                        and board.attackers_mask(not board.turn, move.to_square) \
+                        and not board.is_en_passant(move):
                     continue
             board.push(move)
             try:
@@ -255,7 +271,9 @@ class Engine:
 
     def _search(self, board: chess.Board, depth: int, alpha: int, beta: int, ply: int, null_ok: bool = True) -> int:
         self._tick()
-        if board.is_repetition(2) or board.halfmove_clock >= 100 or board.is_insufficient_material():
+        key = board._transposition_key()
+        if key in self.path or board.halfmove_clock >= 100 \
+                or (board.occupied.bit_count() <= 4 and board.is_insufficient_material()):
             return 0
         in_check = board.is_check()
         if in_check:
@@ -263,7 +281,14 @@ class Engine:
         if depth <= 0:
             return self._quiesce(board, alpha, beta, ply)
 
-        key = chess.polyglot.zobrist_hash(board)
+        self.path.add(key)
+        try:
+            return self._node(board, key, depth, alpha, beta, ply, null_ok, in_check)
+        finally:
+            self.path.discard(key)
+
+    def _node(self, board: chess.Board, key: tuple, depth: int, alpha: int, beta: int, ply: int,
+              null_ok: bool, in_check: bool) -> int:
         entry = self.tt.get(key)
         tt_move = None
         if entry:
@@ -328,25 +353,31 @@ class Engine:
         line, b = [first], board.copy()
         b.push(first)
         while len(line) < limit and not b.is_game_over():
-            entry = self.tt.get(chess.polyglot.zobrist_hash(b))
+            entry = self.tt.get(b._transposition_key())
             if not entry or entry[3] is None or entry[3] not in b.legal_moves or b.is_repetition(2):
                 break
             line.append(entry[3])
             b.push(entry[3])
         return line
 
-    def search(self, board: chess.Board, depth: int = 4, seconds: float = 2.0, multi: bool = False) -> SearchResult:
-        """Ітеративне заглиблення. multi=True – точна оцінка кожного кореневого ходу."""
+    def search(self, board: chess.Board, depth: int = 4, seconds: float = 2.0, multi: bool = False,
+               min_depth: int = 1) -> SearchResult:
+        """Ітеративне заглиблення. multi=True – точна оцінка кожного кореневого ходу.
+        Глибини до min_depth завершуються навіть тоді, коли час вийшов."""
         board = board.copy()
         self._reset()
         start = time.perf_counter()
+        back = board.copy()
+        self.path.add(back._transposition_key())
+        while back.move_stack and back.halfmove_clock:  # старіші за незворотний хід не повторяться
+            back.pop()
+            self.path.add(back._transposition_key())
         moves = self._ordered(board, 0, None)
         if not moves:
             return SearchResult(None, -MATE if board.is_check() else 0)
         result = SearchResult(moves[0], evaluate(board), pv=[moves[0]])
         for d in range(1, depth + 1):
-            # Глибина 1 завершується завжди, щоб хід точно був осмислений.
-            self.deadline = start + seconds if d > 1 else float("inf")
+            self.deadline = start + seconds if d > min_depth else float("inf")
             alpha, scored = -MATE * 2, []
             try:
                 for i, move in enumerate(moves):
@@ -370,7 +401,7 @@ class Engine:
                                   scores=scored if multi else [])
             if abs(result.score) >= MATE_ZONE and MATE - abs(result.score) <= d:
                 break
-            if time.perf_counter() - start > seconds * 0.6:
+            if d >= min_depth and time.perf_counter() - start > seconds * 0.6:
                 break
         result.nodes = self.nodes
         result.seconds = time.perf_counter() - start

@@ -97,9 +97,14 @@ class Game:
             self._push(move)
             return move
 
+    def _drop_analysis(self) -> None:
+        if self.analysis:
+            self.analysis.cancelled = True
+        self.analysis = None
+
     def _push(self, move: chess.Move) -> None:
         self.board.push(move)
-        self.analysis = None
+        self._drop_analysis()
 
     def reply(self) -> None:
         """Хід комп'ютера. Пошук іде на копії дошки, тому стан можна читати паралельно."""
@@ -138,7 +143,8 @@ class Game:
             self.board.pop()
             while self.opponent != "human" and self.board.turn != mine:
                 self.board.pop()
-            self.info, self.analysis = None, None
+            self.info = None
+            self._drop_analysis()
 
     def resign(self) -> None:
         with self.lock:

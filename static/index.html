@@ -20,13 +20,14 @@
 <main class="layout">
   <section class="left" aria-label="Дошка">
     <div class="player" id="p-top"></div>
-    <div class="row"><div id="evalbar" hidden></div><div id="board" style="grid-column:2"></div></div>
+    <div class="row"><div id="evalbar" hidden><div></div><span></span></div><div id="board" style="grid-column:2"></div></div>
     <div class="player" id="p-bottom"></div>
   </section>
 
   <aside class="panel">
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="game" aria-selected="true">Партія</button>
+      <button role="tab" data-tab="analysis" aria-selected="false">Аналіз</button>
     </div>
     <div class="tab" id="tab-game">
       <div class="status"><strong id="status"></strong><small id="opening"></small><span class="fine" id="info"></span></div>
@@ -49,6 +50,7 @@
         <button class="btn">Хід</button>
       </form>
     </div>
+    <div class="tab scroll" id="tab-analysis" hidden></div>
     <div class="msg" id="msg" role="status"></div>
   </aside>
 </main>

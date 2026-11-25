@@ -14,6 +14,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from . import storage
+from .analysis import SPEEDS, Analysis
 from .engine import LEVELS, Engine
 from .game import Game, MoveError
 
@@ -126,6 +127,26 @@ async def hint(request: Request) -> Response:
     return JSONResponse({"uci": res.move.uci(), "san": board.san(res.move), "pv": board.variation_san(res.pv)})
 
 
+async def analysis_start(request: Request) -> Response:
+    game = get_game(request)
+    speed = (await body_of(request)).get("speed", "fast")
+    if speed not in SPEEDS:
+        raise HTTPException(400, "Невідомий режим аналізу")
+    with game.lock:
+        if not game.board.move_stack:
+            raise MoveError("У партії ще немає ходів")
+        if game.analysis:
+            game.analysis.cancelled = True
+        game.analysis = Analysis(game.board, speed)
+        game.analysis.start()
+    return JSONResponse(game.analysis.state())
+
+
+async def analysis_state(request: Request) -> Response:
+    analysis = get_game(request).analysis
+    return JSONResponse(analysis.state() if analysis else {"started": False})
+
+
 async def pgn(request: Request) -> Response:
     game = get_game(request)
     return Response(game.pgn(), media_type="application/x-chess-pgn",
@@ -154,6 +175,8 @@ app = Starlette(
         Route("/api/games/{id}/undo", undo, methods=["POST"]),
         Route("/api/games/{id}/resign", resign, methods=["POST"]),
         Route("/api/games/{id}/hint", hint, methods=["POST"]),
+        Route("/api/games/{id}/analysis", analysis_state),
+        Route("/api/games/{id}/analysis", analysis_start, methods=["POST"]),
         Route("/api/games/{id}/pgn", pgn),
         Mount("/static", StaticFiles(directory=STATIC)),
     ],

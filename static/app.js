@@ -1,4 +1,5 @@
 import { Board, parseFen } from '/static/board.js';
+import { AnalysisView } from '/static/analysis.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -13,7 +14,7 @@ export async function api(url, body) {
   if (!r.ok) throw new Error(data.error || 'Помилка сервера');
   return data;
 }
-const say = (text = '') => { $('msg').textContent = text; };
+const say = (text = '', info = false) => { $('msg').textContent = text; $('msg').classList.toggle('info', info); };
 const guard = fn => async (...a) => { say(); try { await fn(...a); } catch (e) { say(e.message); } };
 
 // ---------- партія ----------
@@ -43,6 +44,21 @@ async function reply() {
   if (st.id !== id) reply();
 }
 
+// ---------- аналіз ----------
+let rows = null;      // розбір ходів, якщо він є
+const analysis = new AnalysisView($('tab-analysis'), {
+  api, go: n => go(n),
+  onData: d => { rows = d?.rows || null; if (st) render(); },
+  explain: () => {},
+});
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(name) {
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    b.setAttribute('aria-selected', b.dataset.tab === name);
+    $('tab-' + b.dataset.tab).hidden = b.dataset.tab !== name;
+  });
+}
+
 function open(state) {
   st = state; view = null;
   localStorage.setItem('game', st.id);
@@ -60,7 +76,16 @@ const position = () => {
 
 function render() {
   const p = position(), live = view === null || view === st.history.length;
-  board.set({ fen: p.fen, last: p.last, check: p.check, legal: live && !busy ? st.legal : {} });
+  const row = rows?.[p.n - 1];
+  board.set({
+    fen: p.fen, last: p.last, check: p.check, legal: live && !busy ? st.legal : {},
+    badge: row && { cls: row.class, text: row.mark },
+  });
+  // Стрілка показує, що варто було зіграти замість помилкового ходу.
+  if (row) board.setArrows(['inacc', 'mistake', 'blunder'].includes(row.class) ? [{ uci: row.bestUci, cls: 'best' }] : []);
+  renderEval(row);
+  if (analysis.ply !== p.n) analysis.setPly(p.n);
+  analysis.load(st);
   renderPlayers(p);
   renderStatus();
   renderMoves(p.n);
@@ -68,6 +93,15 @@ function render() {
   $('undo').disabled = st.imported || !st.history.length;
   $('hint').disabled = !!st.result || st.imported || busy || !live;
   $('resign').disabled = !!st.result || st.imported;
+}
+
+function renderEval(row) {
+  const bar = $('evalbar');
+  bar.hidden = !rows;
+  if (!rows) return;
+  bar.classList.toggle('flipped', board.flipped);
+  bar.firstElementChild.style.height = `${row ? row.win : 50}%`;
+  bar.lastElementChild.textContent = row ? row.scoreText : '0';
 }
 
 const VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }, START = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -98,12 +132,13 @@ function renderStatus() {
   $('info').textContent = i?.by === 'engine' && i.nodes ? `глибина ${i.depth} · ${i.nodes.toLocaleString('uk')} позицій · ${i.seconds} с` : '';
 }
 
+const mark = ply => { const r = rows?.[ply - 1]; return r && r.class !== 'good' ? `<i class="mk ${r.class}" title="${r.className}">${r.mark}</i>` : ''; };
 function renderMoves(current) {
   const box = $('moves');
   if (!st.history.length) { box.innerHTML = '<div class="empty">Ходів ще немає. Перетягніть фігуру, клацніть її або введіть хід текстом.</div>'; return; }
   box.innerHTML = st.history.map((h, i) =>
     (i % 2 ? '' : `<span class="n">${i / 2 + 1}.</span>`) +
-    `<button data-ply="${h.ply}" class="${h.ply === current ? 'on' : ''}">${esc(h.san)}</button>`).join('');
+    `<button data-ply="${h.ply}" class="${h.ply === current ? 'on' : ''}">${esc(h.san)}${mark(h.ply)}</button>`).join('');
   box.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
 }
 
@@ -129,11 +164,11 @@ $('flip').onclick = () => { board.setFlipped(!board.flipped); render(); };
 $('undo').onclick = guard(async () => { st = await api(`/api/games/${st.id}/undo`, {}); view = null; board.setArrows([]); render(); });
 $('resign').onclick = guard(async () => { if (confirm('Здатися?')) { st = await api(`/api/games/${st.id}/resign`, {}); render(); } });
 $('hint').onclick = guard(async () => {
-  $('hint').disabled = true; say('Шукаю хід…');
+  $('hint').disabled = true; say('Шукаю хід…', true);
   const id = st.id, n = st.history.length, h = await api(`/api/games/${id}/hint`, {});
   $('hint').disabled = false;
   if (st.id !== id || st.history.length !== n) return say();
-  board.setArrows([{ uci: h.uci, cls: 'hint' }]); say(`Підказка: ${h.pv}`);
+  board.setArrows([{ uci: h.uci, cls: 'hint' }]); say(`Підказка: ${h.pv}`, true);
 });
 
 // ---------- діалоги ----------

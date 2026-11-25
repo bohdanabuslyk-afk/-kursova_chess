@@ -1,0 +1,21 @@
+import { start, sleep, EVERGREEN } from './ui.mjs';
+
+const u = await start();
+const D = 'screenshots/05_v0.5_analiz_khodiv/';
+const tab = async n => { await u.click(`[data-tab=${n}]`); await sleep(300); };
+await u.importPgn(EVERGREEN);
+await tab('analysis');
+await u.shot(D + '01_zapusk_analizu.png');
+await u.click('[data-speed=fast]'); await sleep(6000);
+await u.shot(D + '02_analiz_tryvaie.png');
+await u.until(`!!document.querySelector('.accs')`, 180000); await sleep(500);
+await u.shot(D + '03_pidsumok_tochnist_hrafik.png');
+await u.click('.chip'); await sleep(600);
+await u.shot(D + '04_rozbir_pomylky_strilka.png');
+const [x, y] = await u.center('.plot');
+await u.mouse('mouseMoved', x + 60, y); await sleep(300);
+await u.shot(D + '05_pidkazka_na_hrafiku.png');
+await tab('game');
+await u.shot(D + '06_poznachky_v_zapysi_khodiv.png');
+console.log('помилки JS:', u.errors);
+await u.close();
